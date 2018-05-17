@@ -1,0 +1,14 @@
+{
+  "name": "aerogear-integration-tests",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test:cordova": "mocha cordova/test.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mocha": "^5.1.1",
+    "webdriverio": "^4.12.0"
+  }
+}
