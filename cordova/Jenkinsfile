@@ -1,79 +1,77 @@
-node ('osx2') {
-  stage('Prepare osx workspace') {                    
-    // Clean workspace
+node('osx2') {
+  stage('Prepare workspace') {                    
     deleteDir()
-
-    // Checkout to osx slave
-    checkout scm
-
-    // Clone example app
-    sh 'git clone git@github.com:jhellar/cordova-showcase-template.git cordova-example'
-    dir('cordova-example') {
-      sh 'git checkout jenkinsTest2'
-
-      // Restart appium
-      sh """
-        lsof -i tcp:4723 | grep LISTEN | awk '{print \$2}' | xargs kill
-        nohup appium &>"\$HOME/appium.log" </dev/null &
-      """
+    
+    dir('app') {
+      git 'https://github.com/aerogear/cordova-showcase-template.git'
     }
+    
+    dir('tests') {
+      git 'https://github.com/jhellar/integration-tests.git'
+    }
+
+    // Restart appium
+    sh """
+      lsof -i tcp:4723 | grep LISTEN | awk '{print \$2}' | xargs kill
+      nohup appium &>"\$HOME/appium.log" </dev/null &
+    """
   }
 
   stage ('Install dependencies') {
-    sh '''
-      npm install
-      npm run bootstrap
-      npm run build
-    '''
-    dir('cordova-example') {
+    dir('app') {
+      sh 'npm install'
+    }
+    
+    dir('tests') {
       sh '''
         npm install
-        npm link ../packages/core
-        npm link ../packages/auth
+        npm install mocha-jenkins-reporter
       '''
-      dir('tests') {
-        sh '''
-          npm install
-          npm install mocha-jenkins-reporter
-        '''
-      }
     }
   }
 
-  def platforms = ['ios', 'android']
+  def platforms = ['android', 'ios']
   for (int i = 0; i < platforms.size(); i++) {
     platform = platforms[i]                      
     stage("Build ${platform}") {
       try {
-        dir('cordova-example') {
+        dir('app') {
           sh """
             npm run ionic:build
             ionic cordova build ${platform} --emulator
           """
         }
       } catch (Exception e) {
-        currentBuild.result = 'FAILURE'
+        currentBuild.result = 'UNSTABLE'
       }
     }
 
-    stage ("Run integration test for ${platform}") {
+    stage ("Test ${platform}") {
       try {
-        dir('cordova-example/tests') {
+        if (platform == 'android') {
+            env.APP = 'app/platforms/android/app/build/outputs/apk/debug/app-debug.apk'
+            env.VERSION = '8'
+        } else {
+            env.APP = 'app/platforms/ios/build/emulator/cordova-showcase-template.app'
+            env.VERSION = '11.2'
+        }
+          
+        dir('tests') {
           sh """
-            rm opts.json || true
-            cp opts_${platform}.json opts.json
-            JUNIT_REPORT_PATH=report.xml JUNIT_REPORT_STACK=1 npm start -- --reporter mocha-jenkins-reporter
-            mv report.xml report_${platform}.xml
+            export JUNIT_REPORT_PATH=report_${platform}.xml   
+            export JUNIT_REPORT_STACK=1
+            export PLATFORM=${platform}
+            npm run test:cordova -- --reporter mocha-jenkins-reporter
           """
         }
       } catch (Exception e) {
-        currentBuild.result = 'FAILURE'
+        currentBuild.result = 'UNSTABLE'
       }
     }
   }
 
   stage('Record Results') {
-    archive 'cordova-example/tests/report*.xml'
-    junit allowEmptyResults: true, testResults: 'cordova-example/tests/report*.xml'
+    archive 'tests/report*.xml'
+    junit allowEmptyResults: true, testResults: 'tests/report*.xml'
   }
 }
