@@ -34,38 +34,33 @@ node('osx2') {
   for (int i = 0; i < platforms.size(); i++) {
     platform = platforms[i]                      
     stage("Build ${platform}") {
-      try {
-        dir('app') {
-          sh """
-            npm run ionic:build
-            ionic cordova build ${platform} --emulator
-          """
-        }
-      } catch (Exception e) {
-        currentBuild.result = 'UNSTABLE'
+      dir('app') {
+        sh """
+          npm run ionic:build
+          ionic cordova build ${platform} --emulator
+        """
       }
     }
+  }
 
+  for (int i = 0; i < platforms.size(); i++) {
+    platform = platforms[i]                     
     stage ("Test ${platform}") {
-      try {
-        if (platform == 'android') {
-            env.APP = 'app/platforms/android/app/build/outputs/apk/debug/app-debug.apk'
-            env.VERSION = '8'
-        } else {
-            env.APP = 'app/platforms/ios/build/emulator/cordova-showcase-template.app'
-            env.VERSION = '11.2'
-        }
-          
-        dir('tests') {
-          sh """
-            export JUNIT_REPORT_PATH=report_${platform}.xml   
-            export JUNIT_REPORT_STACK=1
-            export PLATFORM=${platform}
-            npm run test:cordova -- --reporter mocha-jenkins-reporter
-          """
-        }
-      } catch (Exception e) {
-        currentBuild.result = 'UNSTABLE'
+      if (platform == 'android') {
+          env.APP = 'app/platforms/android/app/build/outputs/apk/debug/app-debug.apk'
+          env.VERSION = '8'
+      } else {
+          env.APP = 'app/platforms/ios/build/emulator/cordova-showcase-template.app'
+          env.VERSION = '11.2'
+      }
+        
+      dir('tests') {
+        sh """
+          export JUNIT_REPORT_PATH=report_${platform}.xml   
+          export JUNIT_REPORT_STACK=1
+          export PLATFORM=${platform}
+          npm run test:cordova -- --reporter mocha-jenkins-reporter || true
+        """
       }
     }
   }
